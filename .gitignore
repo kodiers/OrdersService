@@ -31,3 +31,7 @@ build/
 
 ### VS Code ###
 .vscode/
+
+orders.lock.db
+orders.mv.db
+orders.trace.db
