@@ -4,6 +4,7 @@ import com.tfl.estore.ordersservice.core.data.OrderEntity;
 import com.tfl.estore.ordersservice.core.data.OrdersRepository;
 import com.tfl.estore.ordersservice.core.events.OrderApprovedEvent;
 import com.tfl.estore.ordersservice.core.events.OrderCreatedEvent;
+import com.tfl.estore.ordersservice.core.events.OrderRejectEvent;
 import org.axonframework.eventhandling.EventHandler;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Component;
@@ -31,6 +32,13 @@ public class OrderEventsHandler {
             return;
         }
         orderEntity.setOrderStatus(orderApprovedEvent.getOrderStatus());
+        ordersRepository.save(orderEntity);
+    }
+
+    @EventHandler
+    public void on(OrderRejectEvent orderRejectEvent) {
+        OrderEntity orderEntity = ordersRepository.findByOrderId(orderRejectEvent.getOrderId());
+        orderEntity.setOrderStatus(orderRejectEvent.getOrderStatus());
         ordersRepository.save(orderEntity);
     }
 }

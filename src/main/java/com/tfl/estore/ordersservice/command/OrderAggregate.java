@@ -3,6 +3,7 @@ package com.tfl.estore.ordersservice.command;
 import com.tfl.estore.ordersservice.core.data.OrderStatus;
 import com.tfl.estore.ordersservice.core.events.OrderApprovedEvent;
 import com.tfl.estore.ordersservice.core.events.OrderCreatedEvent;
+import com.tfl.estore.ordersservice.core.events.OrderRejectEvent;
 import org.axonframework.commandhandling.CommandHandler;
 import org.axonframework.eventsourcing.EventSourcingHandler;
 import org.axonframework.modelling.command.AggregateIdentifier;
@@ -51,5 +52,18 @@ public class OrderAggregate {
     @EventSourcingHandler
     public void on(OrderApprovedEvent orderApprovedEvent) {
         this.orderStatus = orderApprovedEvent.getOrderStatus();
+    }
+
+    @CommandHandler
+    public void handle(RejectOrderCommand rejectOrderCommand) {
+        OrderRejectEvent orderRejectEvent = new OrderRejectEvent(rejectOrderCommand.getOrderId(),
+                rejectOrderCommand.getReason());
+        AggregateLifecycle.apply(orderRejectEvent);
+    }
+
+    @EventSourcingHandler
+    public void on(OrderRejectEvent orderRejectEvent) {
+        this.orderStatus = orderRejectEvent.getOrderStatus();
+
     }
 }

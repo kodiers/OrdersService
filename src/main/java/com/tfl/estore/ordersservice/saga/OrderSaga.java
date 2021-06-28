@@ -1,14 +1,18 @@
 package com.tfl.estore.ordersservice.saga;
 
+import com.tfl.estore.core.commands.CancelProductReservationCommand;
 import com.tfl.estore.core.commands.ProcessPaymentCommand;
 import com.tfl.estore.core.commands.ReserveProductCommand;
 import com.tfl.estore.core.events.PaymentProcessedEvent;
+import com.tfl.estore.core.events.ProductReservationCanceledEvent;
 import com.tfl.estore.core.events.ProductReservedEvent;
 import com.tfl.estore.core.model.User;
 import com.tfl.estore.core.query.FetchUserPaymentDetailsQuery;
 import com.tfl.estore.ordersservice.command.ApproveOrderCommand;
+import com.tfl.estore.ordersservice.command.RejectOrderCommand;
 import com.tfl.estore.ordersservice.core.events.OrderApprovedEvent;
 import com.tfl.estore.ordersservice.core.events.OrderCreatedEvent;
+import com.tfl.estore.ordersservice.core.events.OrderRejectEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.axonframework.commandhandling.CommandCallback;
 import org.axonframework.commandhandling.CommandMessage;
@@ -35,6 +39,17 @@ public class OrderSaga {
 
     @Autowired
     private transient QueryGateway queryGateway;
+
+    private void cancelProductReservation(ProductReservedEvent productReservedEvent, String reason) {
+        CancelProductReservationCommand command = CancelProductReservationCommand.builder()
+                .orderId(productReservedEvent.getOrderId())
+                .productId(productReservedEvent.getProductId())
+                .quantity(productReservedEvent.getQuantity())
+                .userId(productReservedEvent.getUserId())
+                .reason(reason)
+                .build();
+        commandGateway.send(command);
+    }
 
     @StartSaga
     @SagaEventHandler(associationProperty = "orderId")
@@ -67,10 +82,12 @@ public class OrderSaga {
         } catch (Exception e) {
             log.error(e.getMessage());
             // start compensating transaction
+            cancelProductReservation(productReservedEvent, e.getMessage());
             return;
         }
         if (user == null) {
             // start compensating transaction
+            cancelProductReservation(productReservedEvent, "Could not fetch user");
             return;
         }
         log.info("Successfully get user");
@@ -86,11 +103,13 @@ public class OrderSaga {
         } catch (Exception e) {
             // start compensating transaction
             log.error(e.getMessage());
+            cancelProductReservation(productReservedEvent, e.getMessage());
             return;
         }
         if (result == null) {
             // start compensating transaction
             log.error("ProcessPaymentCommand failed: " + processPaymentCommand.getOrderId());
+            cancelProductReservation(productReservedEvent, "ProcessPaymentCommand failed: " + processPaymentCommand.getOrderId());
             return;
         }
     }
@@ -99,6 +118,20 @@ public class OrderSaga {
     public void handle(PaymentProcessedEvent event) {
         ApproveOrderCommand approveOrderCommand = new ApproveOrderCommand(event.getOrderId());
         commandGateway.send(approveOrderCommand);
+    }
+
+    @SagaEventHandler(associationProperty = "orderId")
+    public void handle(ProductReservationCanceledEvent productReservationCanceledEvent) {
+        // send RejectOrderCommand
+        RejectOrderCommand rejectOrderCommand = new RejectOrderCommand(productReservationCanceledEvent.getOrderId(),
+                productReservationCanceledEvent.getReason());
+        commandGateway.send(rejectOrderCommand);
+    }
+
+    @EndSaga
+    @SagaEventHandler(associationProperty = "orderId")
+    public void handle(OrderRejectEvent orderRejectEvent) {
+        log.info("Rejected order " + orderRejectEvent.getOrderId());
     }
 
     @EndSaga
