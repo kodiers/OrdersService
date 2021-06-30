@@ -10,9 +10,11 @@ import com.tfl.estore.core.model.User;
 import com.tfl.estore.core.query.FetchUserPaymentDetailsQuery;
 import com.tfl.estore.ordersservice.command.ApproveOrderCommand;
 import com.tfl.estore.ordersservice.command.RejectOrderCommand;
+import com.tfl.estore.ordersservice.core.data.OrderSummary;
 import com.tfl.estore.ordersservice.core.events.OrderApprovedEvent;
 import com.tfl.estore.ordersservice.core.events.OrderCreatedEvent;
 import com.tfl.estore.ordersservice.core.events.OrderRejectEvent;
+import com.tfl.estore.ordersservice.query.FindOrderQuery;
 import lombok.extern.slf4j.Slf4j;
 import org.axonframework.commandhandling.CommandCallback;
 import org.axonframework.commandhandling.CommandMessage;
@@ -25,6 +27,7 @@ import org.axonframework.modelling.saga.EndSaga;
 import org.axonframework.modelling.saga.SagaEventHandler;
 import org.axonframework.modelling.saga.StartSaga;
 import org.axonframework.queryhandling.QueryGateway;
+import org.axonframework.queryhandling.QueryUpdateEmitter;
 import org.axonframework.spring.stereotype.Saga;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -47,6 +50,9 @@ public class OrderSaga {
 
     @Autowired
     private transient DeadlineManager deadlineManager;
+
+    @Autowired
+    private transient QueryUpdateEmitter queryUpdateEmitter;
 
     private String scheduleId;
 
@@ -155,12 +161,17 @@ public class OrderSaga {
     @SagaEventHandler(associationProperty = "orderId")
     public void handle(OrderRejectEvent orderRejectEvent) {
         log.info("Rejected order " + orderRejectEvent.getOrderId());
+        queryUpdateEmitter.emit(FindOrderQuery.class, q -> true,
+                new OrderSummary(orderRejectEvent.getOrderId(), orderRejectEvent.getOrderStatus(),
+                        orderRejectEvent.getReason()));
     }
 
     @EndSaga
     @SagaEventHandler(associationProperty = "orderId")
     public void handle(OrderApprovedEvent orderApprovedEvent) {
         log.info("Order is approved: " + orderApprovedEvent.getOrderId());
+        queryUpdateEmitter.emit(FindOrderQuery.class, q -> true,
+                new OrderSummary(orderApprovedEvent.getOrderId(), orderApprovedEvent.getOrderStatus(), ""));
 //        SagaLifecycle.end();
     }
 
